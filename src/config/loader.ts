@@ -33,6 +33,7 @@ export function parseConfig(raw: unknown): LoadedConfig {
 	const policy = {
 		enabled: DEFAULT_POLICY.enabled,
 		thresholdTokens: DEFAULT_POLICY.thresholdTokens,
+		autoResume: DEFAULT_POLICY.autoResume,
 	};
 
 	if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
@@ -70,6 +71,17 @@ export function parseConfig(raw: unknown): LoadedConfig {
 		}
 	}
 
+	const rawAutoResume = section.autoResume;
+	if (rawAutoResume !== undefined) {
+		if (typeof rawAutoResume === "boolean") {
+			policy.autoResume = rawAutoResume;
+		} else {
+			warnings.push(
+				`${SETTINGS_KEY}.autoResume must be a boolean, got ${describe(rawAutoResume)}; using default.`,
+			);
+		}
+	}
+
 	return { policy, warnings };
 }
 
@@ -91,7 +103,6 @@ export function loadConfig(agentDir: string, cwd: string, options: LoadConfigOpt
 	const merged = { ...globalSection, ...projectSection };
 	const parsed = parseConfig(merged);
 	warnings.push(...parsed.warnings);
-	const { policy } = parsed;
 
 	// Pathological-config guard: after a compaction Pi keeps `keepRecentTokens`
 	// (default 20k) as the un-summarized remainder. A ceiling at or below that
@@ -99,12 +110,24 @@ export function loadConfig(agentDir: string, cwd: string, options: LoadConfigOpt
 	// post-compaction turn fires a fresh compaction — a permanent 1-turn loop.
 	// Surface it; never clamp silently.
 	const keepRecent = readKeepRecentTokens(agentDir, cwd, options.projectTrusted);
+	let { policy } = parsed;
 	if (policy.enabled && policy.thresholdTokens <= keepRecent) {
 		warnings.push(
 			`threshold ${policy.thresholdTokens.toLocaleString()} is at or below Pi's ` +
 				`compaction.keepRecentTokens (${keepRecent.toLocaleString()}), so compaction would ` +
 				`re-trigger after every turn; raise ${SETTINGS_KEY}.tokens.`,
 		);
+		// With auto-resume, the 1-turn loop becomes a hard runaway: compact,
+		// continue, immediately over the ceiling again, compact... Disable it
+		// here — a pathological ceiling is already warned about, and resuming
+		// turns is what turns the warning into a flameout.
+		if (policy.autoResume) {
+			policy = { ...policy, autoResume: false };
+			warnings.push(
+				`${SETTINGS_KEY}.autoResume disabled because the ceiling cannot settle; ` +
+					`raise ${SETTINGS_KEY}.tokens above ${keepRecent.toLocaleString()} to re-enable.`,
+			);
+		}
 	}
 
 	return { policy, warnings };

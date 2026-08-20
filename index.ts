@@ -79,10 +79,21 @@ export default function compactionThresholdExtension(pi: ExtensionAPI) {
 		ctx.compact({
 			onComplete: () => {
 				compacting = false;
-				notify(
-					ctx,
-					"Compaction completed. The turn was interrupted; progress is preserved in the summary — say 'continue' to resume.",
-				);
+				if (policy.autoResume) {
+					// Automatic continuation: a fresh turn, not a true resumption of
+					// the interrupted one (Pi exposes no continuation handle to
+					// extensions), but the model picks up from the summary plus recent
+					// context exactly where the work stopped.
+					pi.sendUserMessage(
+						"Continue the previous work. Context was compacted at this point; use the summary above to pick up where you left off.",
+					);
+					notify(ctx, "Compaction completed; automatically continuing the interrupted work.");
+				} else {
+					notify(
+						ctx,
+						"Compaction completed. The turn was interrupted; progress is preserved in the summary — say 'continue' to resume.",
+					);
+				}
 			},
 			onError: (error) => {
 				compacting = false;

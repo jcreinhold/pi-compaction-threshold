@@ -15,6 +15,7 @@ export const DEFAULT_KEEP_RECENT_TOKENS = defaultTokenCount(20_000);
 export const DEFAULT_POLICY: ResolvedPolicy = {
 	enabled: true,
 	thresholdTokens: defaultTokenCount(DEFAULT_THRESHOLD_TOKENS),
+	autoResume: true,
 };
 
 /**

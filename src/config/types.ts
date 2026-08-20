@@ -37,6 +37,14 @@ export interface CompactionThresholdConfig {
    * `DEFAULT_THRESHOLD_TOKENS` when absent or invalid.
    */
   tokens?: unknown;
+  /**
+   * Whether to send an automatic "continue" turn after compaction so
+   * long-running autonomous work picks up where it left off. Defaults to
+   * `true`. This is a new turn, not a true resumption of the interrupted
+   * one — Pi exposes no continuation handle to extensions — but the model
+   * continues from the summary plus recent context.
+   */
+  autoResume?: unknown;
 }
 
 /**
@@ -51,6 +59,8 @@ export interface CompactionThresholdConfig {
 export interface ResolvedPolicy {
   readonly enabled: boolean;
   readonly thresholdTokens: TokenCount;
+  /** See {@link CompactionThresholdConfig.autoResume}. */
+  readonly autoResume: boolean;
 }
 
 /** The result of reading and validating the user's configuration. */

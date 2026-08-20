@@ -54,7 +54,8 @@ Settings live in Pi's own settings files — `~/.pi/agent/settings.json`
 {
   "compactionThreshold": {
     "enabled": true,
-    "tokens": 250000
+    "tokens": 250000,
+    "autoResume": true
   }
 }
 ```
@@ -63,6 +64,7 @@ Settings live in Pi's own settings files — `~/.pi/agent/settings.json`
 | --- | --- | --- | --- |
 | `compactionThreshold.enabled` | boolean | `true` | Master switch for the proactive trigger |
 | `compactionThreshold.tokens` | positive integer | `250000` | Compact when estimated context tokens reach this ceiling |
+| `compactionThreshold.autoResume` | boolean | `true` | After compacting, send an automatic "continue" turn so long-running work picks up where it stopped |
 
 Invalid values do not break the extension: each bad field falls back to its
 default and you get a one-time warnings notification on `session_start`.
@@ -92,15 +94,23 @@ is interrupted, the session is compacted, and the agent goes idle.
 
 Two consequences worth knowing:
 
-1. **The interrupted turn does not resume on its own.** Manual compaction
-   (`reason: "manual"`) never sets Pi's retry flag; only Pi's own
-   context-overflow recovery retries a turn, and an extension cannot request
-   that path. What you lose is the *rest* of the current turn — nothing is
-   deleted from the session, and the structured summary's `## Progress` /
-   `## Next Steps` sections exist precisely so you can say **"continue"**
-   and pick up where it stopped.
+1. **The turn resumes automatically by default** — but as a *new* turn, not
+   a true resumption. Pi exposes no continuation handle to extensions:
+   manual compaction (`reason: "manual"`) never sets Pi's retry flag, only
+   Pi's own context-overflow recovery retries a turn (and only when the
+   provider truncated the response), and the same-turn continuation loop
+   (`agent.continue()`) is private to the session. So when compaction
+   completes, the extension sends exactly the instruction a human would:
+   *"Continue the previous work... use the summary above to pick up where
+   you left off."* The model reads the summary's `## Progress` /
+   `## Next Steps` and resumes. Set `autoResume: false` to stop at the
+   ceiling and say "continue" yourself.
 2. **No stacking.** While a compaction is in flight, further check points
    ignore the threshold, so a grinding halt cannot queue a second one.
+
+A practical loop note: after compaction the kept remainder is ~20k tokens,
+so an auto-resumed turn has ~230k of headroom before the next check point —
+a deliberate throttle, not a runaway.
 
 ### Edge cases
 
@@ -119,8 +129,11 @@ the kept remainder alone re-crosses the ceiling — every post-compaction turn
 fires a fresh compaction, forever.
 
 If you set such a ceiling, the extension warns you about it at
-`session_start` (never clamps silently). As a rule of thumb, leave real
-headroom above 20k — the default 250k is ~12×.
+`session_start` (never clamps silently) and **disables `autoResume` for that
+session** — auto-continue would otherwise turn the 1-turn loop into a hard
+runaway (compact → continue → immediately over the ceiling again → compact
+…). Raise the ceiling above the kept remainder to get auto-resume back. As
+a rule of thumb, leave real headroom above 20k — the default 250k is ~12×.
 
 ## Development
 
