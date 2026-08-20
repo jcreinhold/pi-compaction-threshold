@@ -69,12 +69,47 @@ default and you get a one-time warnings notification on `session_start`.
 
 ## Behavior
 
-- Decision point: `turn_end` (the turn is complete; compaction's context
-  rebuild cannot race an in-flight request).
+### Check points
+
+The ceiling is enforced **mid-turn**, not just at turn boundaries, because
+long autonomous agent loops (many tool rounds inside one user message) do
+most of their context growth between `turn_end` events. Each completed unit
+of work is a check point:
+
+- `turn_end` — a turn boundary (the case the original design covered)
+- `tool_execution_end` — after each finished tool call, the biggest source
+  of mid-turn context growth; the tool is already complete, so nothing
+  in-flight is lost
+- `message_end` (assistant) — a single long response that crossed the
+  ceiling on its own
+
+### The interruption
+
+When a check point finds estimated context at/above the ceiling, the
+extension calls `ctx.compact()`. Pi's manual compaction **aborts the current
+agent operation first** (its own documented contract), so the running turn
+is interrupted, the session is compacted, and the agent goes idle.
+
+Two consequences worth knowing:
+
+1. **The interrupted turn does not resume on its own.** Manual compaction
+   (`reason: "manual"`) never sets Pi's retry flag; only Pi's own
+   context-overflow recovery retries a turn, and an extension cannot request
+   that path. What you lose is the *rest* of the current turn — nothing is
+   deleted from the session, and the structured summary's `## Progress` /
+   `## Next Steps` sections exist precisely so you can say **"continue"**
+   and pick up where it stopped.
+2. **No stacking.** While a compaction is in flight, further check points
+   ignore the threshold, so a grinding halt cannot queue a second one.
+
+### Edge cases
+
 - `tokens` unknown (right after a compaction, before the next LLM response)
   is treated as "no decision", never as "compact".
-- While a compaction is in flight, further threshold crossings are ignored,
-  so long-running agent loops cannot stack compactions.
+- If the ceiling is set below the current context at install time, the next
+  check point fires immediately — expected; raise the ceiling.
+- A failed summarization leaves the session as it was (no partial compaction)
+  and notifies; the next check point retries.
 
 ### The `keepRecentTokens` trap
 
