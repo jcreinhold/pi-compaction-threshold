@@ -1,0 +1,30 @@
+{
+  "name": "pi-compaction-threshold",
+  "version": "0.1.0",
+  "description": "Proactively compact Pi sessions once estimated context usage reaches a configurable token ceiling",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi", "pi-extension", "compaction", "context"],
+  "files": ["index.ts", "src", "README.md"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}
